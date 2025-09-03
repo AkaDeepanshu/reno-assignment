@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnection, ensureSchoolsTable } from '@/lib/db';
 import { schoolSchema } from '@/lib/validation';
-import { writeFile } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
+import { existsSync } from 'fs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,16 +28,41 @@ export async function POST(request: NextRequest) {
     let imagePath = null;
     
     // Handle image upload
-    const imageFile = formData.get('image') as File;
-    if (imageFile && imageFile instanceof File && imageFile.size > 0 && imageFile.name !== 'undefined') {
-      console.log('Processing image:', imageFile.name, 'Size:', imageFile.size);
+    const imageFile = formData.get('image');
+    console.log('Image file received:', imageFile);
+    console.log('Image file type:', imageFile ? typeof imageFile : 'undefined');
+    console.log('Is File instance:', imageFile instanceof File);
+    console.log('Form data keys:', [...formData.keys()].join(', '));
+    
+    // Check if image file exists and is valid
+    if (imageFile && imageFile instanceof File && imageFile.size > 0) {
+      console.log('Processing image:', imageFile.name, 'Size:', imageFile.size, 'Type:', imageFile.type);
       try {
         const bytes = await imageFile.arrayBuffer();
         const buffer = Buffer.from(bytes);
         
-        // Generate unique filename
-        const filename = `school_${Date.now()}_${imageFile.name}`;
-        const filepath = join(process.cwd(), 'public', 'schoolImages', filename);
+        // Create schoolImages directory if it doesn't exist
+        const schoolImagesDir = join(process.cwd(), 'public', 'schoolImages');
+        if (!existsSync(schoolImagesDir)) {
+          await mkdir(schoolImagesDir, { recursive: true });
+          console.log('Created schoolImages directory');
+        }
+        
+        // Generate unique filename with sanitized school name
+        const schoolName = formData.get('name') as string;
+        const sanitizedName = schoolName.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // Get file extension from mimetype or fallback to jpeg
+        let extension = 'jpeg';
+        if (imageFile.type) {
+          const match = imageFile.type.match(/image\/(\w+)/);
+          if (match && match[1]) {
+            extension = match[1] === 'jpeg' ? 'jpeg' : (match[1] === 'jpg' ? 'jpeg' : match[1]);
+          }
+        }
+        
+        const filename = `school_${Date.now()}_${sanitizedName}_image1_${Math.floor(Math.random() * 10000)}.${extension}`;
+        const filepath = join(schoolImagesDir, filename);
         
         await writeFile(filepath, buffer);
         imagePath = `/schoolImages/${filename}`;
@@ -111,7 +137,11 @@ export async function GET() {
     
     await connection.end();
     
-    console.log('Fetched schools from database:', rows);
+    // Log detailed information about images
+    console.log('Fetched schools from database:');
+    (rows as any[]).forEach(school => {
+      console.log(`School ID: ${school.id}, Name: ${school.name}, Image path: ${school.image || 'null'}`);
+    });
     
     return NextResponse.json({
       success: true,

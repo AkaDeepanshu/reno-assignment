@@ -1,18 +1,20 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { schoolSchema, SchoolFormData } from '@/lib/validation';
-import Link from 'next/link';
-import toast, { Toaster } from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
+import { useState, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { schoolSchema, SchoolFormData } from "@/lib/validation";
+import Link from "next/link";
+import toast, { Toaster } from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 export default function AddSchoolPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
     register,
@@ -20,58 +22,72 @@ export default function AddSchoolPage() {
     formState: { errors },
     reset,
     setValue,
-    watch
+    watch,
   } = useForm<SchoolFormData>({
-    resolver: zodResolver(schoolSchema)
+    resolver: zodResolver(schoolSchema),
   });
 
-  const imageFile = watch('image');
+  const imageFile = watch("image");
 
   const onSubmit = async (data: SchoolFormData) => {
     setIsSubmitting(true);
 
-    const loadingToast = toast.loading('Adding school...');
+    const loadingToast = toast.loading("Adding school...");
 
     try {
       const formData = new FormData();
-      formData.append('name', data.name);
-      formData.append('address', data.address);
-      formData.append('city', data.city);
-      formData.append('state', data.state);
-      formData.append('contact', data.contact);
-      formData.append('email_id', data.email_id);
+      formData.append("name", data.name);
+      formData.append("address", data.address);
+      formData.append("city", data.city);
+      formData.append("state", data.state);
+      formData.append("contact", data.contact);
+      formData.append("email_id", data.email_id);
+
+      // Try multiple ways to get the image file
       
-      // Only append image if it exists and has a file
-      if (data.image && data.image[0] && data.image[0].size > 0) {
-        console.log('Appending image:', data.image[0].name, 'Size:', data.image[0].size);
-        formData.append('image', data.image[0]);
+      // Method 1: Use our state variable (most reliable)
+      if (selectedImageFile) {
+        console.log("Method 1: Using image from state:", selectedImageFile.name);
+        formData.append("image", selectedImageFile);
+      } 
+      // Method 2: Use the file input ref directly
+      else if (fileInputRef.current && fileInputRef.current.files && fileInputRef.current.files[0]) {
+        const file = fileInputRef.current.files[0];
+        console.log("Method 2: Using image from ref:", file.name);
+        formData.append("image", file);
+      }
+      // Method 3: Use the form data
+      else if (data.image && data.image instanceof FileList && data.image.length > 0) {
+        const file = data.image[0];
+        console.log("Method 3: Using image from form data:", file.name);
+        formData.append("image", file);
       } else {
-        console.log('No image to append');
+        console.log("No image file available to upload");
       }
 
-      const response = await fetch('/api/schools', {
-        method: 'POST',
+      const response = await fetch("/api/schools", {
+        method: "POST",
         body: formData,
       });
 
       const result = await response.json();
 
       if (result.success) {
-        toast.success('School added successfully!', {
+        toast.success("School added successfully!", {
           id: loadingToast,
         });
         reset();
         setPreviewImage(null);
-        
+
         // Redirect to schools page after 1.5 seconds
         setTimeout(() => {
-          router.push('/show-schools');
+          router.push("/show-schools");
         }, 1500);
       } else {
-        throw new Error(result.message || 'Failed to add school');
+        throw new Error(result.message || "Failed to add school");
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to add school', {
+      toast.error(error.message || "Failed to add school", {
         id: loadingToast,
       });
     } finally {
@@ -83,16 +99,28 @@ export default function AddSchoolPage() {
   const handleImageChange = (files: FileList | null) => {
     if (files && files[0]) {
       const file = files[0];
+
+      // Check if it's actually an image
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select a valid image file");
+        return;
+      }
+
+      console.log("Selected file:", file.name, "Type:", file.type, "Size:", file.size);
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewImage(reader.result as string);
       };
       reader.readAsDataURL(file);
+
+      // Store the file in state for direct access during form submission
+      setSelectedImageFile(file);
       
-      // Update form value
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      setValue('image', dt.files);
+      // Also set the form value (though we'll primarily use our state variable)
+      setValue("image", files);
+      
+      console.log("Image file set in state:", file.name);
     }
   };
 
@@ -113,50 +141,70 @@ export default function AddSchoolPage() {
     setDragActive(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      console.log("File dropped:", file.name);
+      
+      // Set the file in state directly as a backup
+      if (file.type.startsWith("image/")) {
+        setSelectedImageFile(file);
+      }
+      
+      // Call the regular handler
       handleImageChange(e.dataTransfer.files);
     }
-  };
-
-  return (
+  };  return (
     <>
       <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#363636',
-            color: '#fff',
+            background: "#363636",
+            color: "#fff",
           },
           success: {
             duration: 3000,
             style: {
-              background: '#10B981',
+              background: "#10B981",
             },
           },
           error: {
             duration: 4000,
             style: {
-              background: '#EF4444',
+              background: "#EF4444",
             },
           },
         }}
       />
-      
+
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         {/* Navigation Bar */}
         <nav className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center">
-                <Link href="/show-schools" className="flex items-center space-x-2 text-gray-600 hover:text-gray-900">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <Link
+                  href="/show-schools"
+                  className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 19l-7-7 7-7"
+                    />
                   </svg>
                   <span>Back to Schools</span>
                 </Link>
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">Add New School</h1>
-              <div className="w-24"></div> {/* Spacer for centering */}
+              
+              <div className="w-24"></div> 
             </div>
           </div>
         </nav>
@@ -165,31 +213,57 @@ export default function AddSchoolPage() {
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <div className="text-center mb-8">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                <svg
+                  className="w-8 h-8 text-blue-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                  />
                 </svg>
               </div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">Add New School</h2>
-              <p className="text-gray-600">Fill in the details to add a new school to the directory</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Add New School
+              </h2>
+              <p className="text-gray-600">
+                Fill in the details to add a new school to the directory
+              </p>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* School Name */}
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="name"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   School Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   id="name"
-                  {...register('name')}
-                  className="w-full px-4 py-3 border text-black border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  {...register("name")}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-black 
+             focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500"
                   placeholder="Enter school name"
                 />
                 {errors.name && (
                   <p className="mt-2 text-sm text-red-600 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <svg
+                      className="w-4 h-4 mr-1"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                     {errors.name.message}
                   </p>
@@ -198,20 +272,32 @@ export default function AddSchoolPage() {
 
               {/* Address */}
               <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="address"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Address <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="address"
-                  {...register('address')}
+                  {...register("address")}
                   rows={3}
-                  className="w-full px-4 py-3 border text-black border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-black 
+             focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500 resize-none"
                   placeholder="Enter complete address"
                 />
                 {errors.address && (
                   <p className="mt-2 text-sm text-red-600 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <svg
+                      className="w-4 h-4 mr-1"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                     {errors.address.message}
                   </p>
@@ -221,20 +307,32 @@ export default function AddSchoolPage() {
               {/* City and State */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="city"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     City <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     id="city"
-                    {...register('city')}
-                    className="w-full px-4 py-3 border text-black border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    {...register("city")}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-black 
+             focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500"
                     placeholder="Enter city"
                   />
                   {errors.city && (
                     <p className="mt-2 text-sm text-red-600 flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="w-4 h-4 mr-1"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       {errors.city.message}
                     </p>
@@ -242,20 +340,32 @@ export default function AddSchoolPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="state"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     State <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     id="state"
-                    {...register('state')}
-                    className="w-full px-4 py-3 border text-black border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    {...register("state")}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-black 
+             focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500"
                     placeholder="Enter state"
                   />
                   {errors.state && (
                     <p className="mt-2 text-sm text-red-600 flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="w-4 h-4 mr-1"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       {errors.state.message}
                     </p>
@@ -266,20 +376,32 @@ export default function AddSchoolPage() {
               {/* Contact and Email */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label htmlFor="contact" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="contact"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Contact Number <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
                     id="contact"
-                    {...register('contact')}
-                    className="w-full px-4 py-3 border text-black border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    {...register("contact")}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-black 
+             focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500"
                     placeholder="Enter contact number"
                   />
                   {errors.contact && (
                     <p className="mt-2 text-sm text-red-600 flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="w-4 h-4 mr-1"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       {errors.contact.message}
                     </p>
@@ -287,20 +409,32 @@ export default function AddSchoolPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="email_id" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="email_id"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
                     Email ID <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
                     id="email_id"
-                    {...register('email_id')}
-                    className="w-full px-4 py-3 border text-black border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    {...register("email_id")}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-black 
+             focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500"
                     placeholder="Enter email address"
                   />
                   {errors.email_id && (
                     <p className="mt-2 text-sm text-red-600 flex items-center">
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="w-4 h-4 mr-1"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       {errors.email_id.message}
                     </p>
@@ -315,9 +449,9 @@ export default function AddSchoolPage() {
                 </label>
                 <div
                   className={`relative border-2 border-dashed rounded-xl p-6 transition-colors ${
-                    dragActive 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-300 hover:border-gray-400'
+                    dragActive
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
                   }`}
                   onDragEnter={handleDrag}
                   onDragLeave={handleDrag}
@@ -326,12 +460,12 @@ export default function AddSchoolPage() {
                 >
                   <input
                     type="file"
-                    {...register('image')}
+                    ref={fileInputRef}
                     accept="image/*"
                     onChange={(e) => handleImageChange(e.target.files)}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
-                  
+
                   {previewImage ? (
                     <div className="text-center">
                       <div className="relative w-32 h-32 mx-auto mb-4 rounded-lg overflow-hidden">
@@ -341,8 +475,12 @@ export default function AddSchoolPage() {
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">Image selected</p>
-                      <p className="text-xs text-gray-400">Click or drag to change</p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        Image selected
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Click or drag to change
+                      </p>
                     </div>
                   ) : (
                     <div className="text-center">
@@ -375,8 +513,16 @@ export default function AddSchoolPage() {
                 </div>
                 {errors.image && (
                   <p className="mt-2 text-sm text-red-600 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <svg
+                      className="w-4 h-4 mr-1"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                     {errors.image.message as string}
                   </p>
@@ -392,14 +538,30 @@ export default function AddSchoolPage() {
                 >
                   {isSubmitting ? (
                     <span className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
                       </svg>
                       Adding School...
                     </span>
                   ) : (
-                    'Add School'
+                    "Add School"
                   )}
                 </button>
               </div>
