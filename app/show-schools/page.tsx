@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 interface School {
   id: number;
@@ -49,7 +50,8 @@ export default function ShowSchoolsPage() {
       } else {
         setError("Failed to fetch schools");
       }
-    } catch (err) {
+    } catch {
+      // We don't need the error variable at all
       setError("An error occurred while fetching schools");
     } finally {
       setLoading(false);
@@ -201,20 +203,24 @@ export default function ShowSchoolsPage() {
                 {/* School Image */}
                 <div className="relative h-48 bg-gray-200 overflow-hidden group">
                   {school.image ? (
-                    <img
-                      src={school.image}
-                      alt={school.name}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                      onError={(e) => {
-                        console.error("Image load error:", school.image);
-                        (e.target as HTMLImageElement).onerror = null;
-                        (e.target as HTMLImageElement).style.display = "none";
-                        (
-                          e.target as HTMLImageElement
-                        ).parentElement!.innerHTML =
-                          '<div class="h-full flex items-center justify-center text-gray-400 text-center"><div class="text-4xl mb-2">🏫</div><p class="text-sm">Image not found</p></div>';
-                      }}
-                    />
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={school.image}
+                        alt={school.name}
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-300 group-hover:scale-110"
+                        onError={(e) => {
+                          console.error("Image load error:", school.image);
+                          // Replace the parent container content on error
+                          const target = e.target as HTMLImageElement;
+                          if (target.parentElement) {
+                            target.parentElement.innerHTML = 
+                              '<div class="h-full flex items-center justify-center text-gray-400 text-center"><div class="text-4xl mb-2">🏫</div><p class="text-sm">Image not found</p></div>';
+                          }
+                        }}
+                      />
+                    </div>
                   ) : (
                     <div className="h-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                       <div className="text-gray-400 text-center">

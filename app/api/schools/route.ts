@@ -98,22 +98,26 @@ export async function POST(request: NextRequest) {
     
     await connection.end();
     
-    console.log('School inserted successfully with ID:', (result as any).insertId);
+    // Use a more specific type for the result
+    const insertResult = result as { insertId: number };
+    console.log('School inserted successfully with ID:', insertResult.insertId);
     
     return NextResponse.json({
       success: true,
       message: 'School added successfully',
-      id: (result as any).insertId
+      id: insertResult.insertId
     });
     
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error adding school:', error);
     
-    if (error.name === 'ZodError') {
+    // Type guard for ZodError
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError' && 'errors' in error) {
+      const zodError = error as { errors: unknown[] };
       return NextResponse.json({
         success: false,
         message: 'Validation failed',
-        errors: error.errors
+        errors: zodError.errors
       }, { status: 400 });
     }
     
@@ -139,7 +143,21 @@ export async function GET() {
     
     // Log detailed information about images
     console.log('Fetched schools from database:');
-    (rows as any[]).forEach(school => {
+    
+    // Define a type for the school record
+    type SchoolRecord = {
+      id: number;
+      name: string;
+      image: string | null;
+      address: string;
+      city: string;
+      state: string;
+      contact: number;
+      email_id: string;
+      created_at?: string;
+    };
+    
+    (rows as SchoolRecord[]).forEach(school => {
       console.log(`School ID: ${school.id}, Name: ${school.name}, Image path: ${school.image || 'null'}`);
     });
     

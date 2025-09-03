@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { schoolSchema, SchoolFormData } from "@/lib/validation";
 import Link from "next/link";
+import Image from "next/image";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 
@@ -22,12 +23,11 @@ export default function AddSchoolPage() {
     formState: { errors },
     reset,
     setValue,
-    watch,
+    // Removed unused watch function
   } = useForm<SchoolFormData>({
     resolver: zodResolver(schoolSchema),
   });
 
-  const imageFile = watch("image");
 
   const onSubmit = async (data: SchoolFormData) => {
     setIsSubmitting(true);
@@ -86,8 +86,9 @@ export default function AddSchoolPage() {
       } else {
         throw new Error(result.message || "Failed to add school");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to add school", {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to add school";
+      toast.error(errorMessage, {
         id: loadingToast,
       });
     } finally {
@@ -469,10 +470,12 @@ export default function AddSchoolPage() {
                   {previewImage ? (
                     <div className="text-center">
                       <div className="relative w-32 h-32 mx-auto mb-4 rounded-lg overflow-hidden">
-                        <img
-                          src={previewImage}
+                        <Image
+                          src={previewImage || "/schoolImages/placeholder.jpg"}
                           alt="Preview"
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
+                          sizes="128px"
                         />
                       </div>
                       <p className="text-sm text-gray-600 mb-2">
